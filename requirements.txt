@@ -1,0 +1,14 @@
+dask==0.18.2
+dask-glm==0.1.0
+dask-ml==0.10.0
+h5py==2.7.0
+lifelines==0.19.1
+matplotlib==2.2.2
+numba==0.37.0+0.gb6b965afa.dirty
+numexpr==2.6.5
+numpy==1.15.0
+pandas==0.23.4
+pandas-plink==1.2.28
+plinkio==0.9.6
+scipy==1.1.0
+
