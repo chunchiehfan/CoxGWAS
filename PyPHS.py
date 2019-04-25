@@ -76,6 +76,9 @@ parser.add_argument("--thread", dest='pl_flag', default=4,
   help='Number of threads to process arrays')
 parser.add_argument("--bfile", dest='geno_prefix', default=None,
   help='Prefix for genotype data in Plink binary format')
+parser.add_argument("--approx", dest='apr_flag', default='N',
+  help='Using approximation or not (recommended for unrelated Biobank samples)')
+
 
 
 # Parsing arguments
@@ -120,9 +123,9 @@ logging.getLogger('').addHandler(console)
 
 ###### Assemble the input info
 if args.subj_list is not None:
-  cline = "PyPHS \n--bfile " + args.geno_prefix + "\n" + "--chunk " + str(args.chunk) + "\n" + "--keep " + args.subj_list + "\n" + "--pheno " + args.phenof + "\n" + "--T " + args.Tname + "\n" + "--event " + args.ename + "\n" + "--covar-name " + args.covname + "\n" + "--thread " + str(args.pl_flag) + "\n--out " + args.outpath + "\n"
+  cline = "PyPHS \n--bfile " + args.geno_prefix + "\n" + "--chunk " + str(args.chunk) + "\n" + "--keep " + args.subj_list + "\n" + "--pheno " + args.phenof + "\n" + "--T " + args.Tname + "\n" + "--event " + args.ename + "\n" + "--covar-name " + args.covname + "\n" + "--thread " + str(args.pl_flag) + "\n--out " + args.outpath + "\n" + "--approx " + args.apr_flag + "\n"
 else:
-  cline = "PyPHS \n--bfile " + args.geno_prefix + "\n" + "--chunk " + str(args.chunk) + "\n" + "--pheno " + args.phenof + "\n" + "--T " + args.Tname + "\n" + "--event " + args.ename + "\n" + "--covar-name " + args.covname + "\n" + "--thread " + str(args.pl_flag) + "\n--out " + args.outpath + "\n"  
+  cline = "PyPHS \n--bfile " + args.geno_prefix + "\n" + "--chunk " + str(args.chunk) + "\n" + "--pheno " + args.phenof + "\n" + "--T " + args.Tname + "\n" + "--event " + args.ename + "\n" + "--covar-name " + args.covname + "\n" + "--thread " + str(args.pl_flag) + "\n--out " + args.outpath + "\n"  + "--approx " + args.apr_flag + "\n"
 
 
 ################################################################
@@ -184,17 +187,18 @@ res_surv = cph.compute_residuals(pheno[[T_name, event_name] + covname], 'marting
 
 # This is the most memory intensive part. Might need to change if we are dealing with biobank scale data
 
-logger.info('Calculating Null covariance matrix\n')
-
-mat = cph.predict_cumulative_hazard(pheno)
-P = np.diff(mat,axis=-0)
-for isubj in range(P.shape[1]):
-  idx = np.abs(mat.index - pheno[T_name][isubj]).argmin()
-  P[idx::,isubj] = 0
-V = da.diag(np.array(pheno[event_name] - res_surv)) - da.dot(P.transpose(),P)
-X = np.array(pheno[covname])
-C = V - da.matmul(da.matmul(da.matmul(V,X), da.linalg.inv(da.matmul(da.matmul(X.transpose(), V),X))), da.matmul(X.transpose(), V))
-
+if args.apr_flag == 'N':
+  logger.info('Calculating Null covariance matrix\n')
+  mat = cph.predict_cumulative_hazard(pheno)
+  P = np.diff(mat,axis=-0)
+  for isubj in range(P.shape[1]):
+    idx = np.abs(mat.index - pheno[T_name][isubj]).argmin()
+    P[idx::,isubj] = 0
+  V = da.diag(np.array(pheno[event_name] - res_surv)) - da.dot(P.transpose(),P)
+  X = np.array(pheno[covname])
+  C = V - da.matmul(da.matmul(da.matmul(V,X), da.linalg.inv(da.matmul(da.matmul(X.transpose(), V),X))), da.matmul(X.transpose(), V))
+else:
+  logger.info('Using first order approximations for testing statistics\n')
 
 # auto chunk to reduce the query time
 chunk_array = [bim.i.values[i:i + chunk_size] for i in xrange(0, len(bim.i.values), chunk_size)]  
@@ -227,7 +231,10 @@ for chunk1 in chunk_array:
   with ProgressBar():
     results = da.compute(g, get=get)
   gtmp = np.stack(results[0][:,0])
-  vtmp = da.diag(da.matmul(gtmp, da.matmul(gtmp, C).transpose())).compute()
+  if args.apr_flag == 'N':
+    vtmp = da.diag(da.matmul(gtmp, da.matmul(gtmp, C).transpose())).compute()
+  else:
+    vtmp = np.stack(results[0][:,2])
   beta_tmp = np.matmul(gtmp, res_surv)
   betavec[chunk1, 0] = beta_tmp
   zvec[chunk1, 0] = beta_tmp/np.sqrt(vtmp)
