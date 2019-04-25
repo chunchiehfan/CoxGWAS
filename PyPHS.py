@@ -119,8 +119,10 @@ console.setLevel(logging.INFO)
 logging.getLogger('').addHandler(console)
 
 ###### Assemble the input info
-cline = "PyPHS \n--bfile " + args.geno_prefix + "\n" + "--chunk " + str(args.chunk) + "\n" + "--keep " + args.subj_list + "\n" + "--pheno " + args.phenof + "\n" + "--T " + args.Tname + "\n" + "--event " + args.ename + "\n" + "--covar-name " + args.covname + "\n" + "--thread " + str(args.pl_flag) + "\n--out " + args.outpath + "\n"
-
+if args.subj_list is not None:
+  cline = "PyPHS \n--bfile " + args.geno_prefix + "\n" + "--chunk " + str(args.chunk) + "\n" + "--keep " + args.subj_list + "\n" + "--pheno " + args.phenof + "\n" + "--T " + args.Tname + "\n" + "--event " + args.ename + "\n" + "--covar-name " + args.covname + "\n" + "--thread " + str(args.pl_flag) + "\n--out " + args.outpath + "\n"
+else:
+  cline = "PyPHS \n--bfile " + args.geno_prefix + "\n" + "--chunk " + str(args.chunk) + "\n" + "--pheno " + args.phenof + "\n" + "--T " + args.Tname + "\n" + "--event " + args.ename + "\n" + "--covar-name " + args.covname + "\n" + "--thread " + str(args.pl_flag) + "\n--out " + args.outpath + "\n"  
 
 
 ################################################################
@@ -183,15 +185,15 @@ res_surv = cph.compute_residuals(pheno[[T_name, event_name] + covname], 'marting
 # This is the most memory intensive part. Might need to change if we are dealing with biobank scale data
 
 logger.info('Calculating Null covariance matrix\n')
+
 mat = cph.predict_cumulative_hazard(pheno)
 P = np.diff(mat,axis=-0)
 for isubj in range(P.shape[1]):
   idx = np.abs(mat.index - pheno[T_name][isubj]).argmin()
   P[idx::,isubj] = 0
-V = np.diag(pheno[event_name] - res_surv) - np.dot(P.transpose(),P)
-X = pheno[covname]
-C = V - np.matmul(np.matmul(np.matmul(V,X), np.linalg.inv(np.matmul(np.matmul(X.transpose(), V),X))), np.matmul(X.transpose(), V))
-
+V = da.diag(np.array(pheno[event_name] - res_surv)) - da.dot(P.transpose(),P)
+X = np.array(pheno[covname])
+C = V - da.matmul(da.matmul(da.matmul(V,X), da.linalg.inv(da.matmul(da.matmul(X.transpose(), V),X))), da.matmul(X.transpose(), V))
 
 
 # auto chunk to reduce the query time
@@ -225,7 +227,7 @@ for chunk1 in chunk_array:
   with ProgressBar():
     results = da.compute(g, get=get)
   gtmp = np.stack(results[0][:,0])
-  vtmp = np.diagonal(np.matmul(gtmp, np.matmul(gtmp, C).transpose()))
+  vtmp = da.diag(da.matmul(gtmp, da.matmul(gtmp, C).transpose())).compute()
   beta_tmp = np.matmul(gtmp, res_surv)
   betavec[chunk1, 0] = beta_tmp
   zvec[chunk1, 0] = beta_tmp/np.sqrt(vtmp)
