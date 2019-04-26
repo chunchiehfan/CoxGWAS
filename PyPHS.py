@@ -234,7 +234,7 @@ for chunk1 in chunk_array:
   if args.apr_flag == 'N':
     vtmp = da.diag(da.matmul(gtmp, da.matmul(gtmp, C).transpose())).compute()
   else:
-    vtmp = np.stack(results[0][:,2])
+    vtmp = np.diagonal(np.matmul(gtmp, gtmp.transpose())) # assuming difference is identity 
   beta_tmp = np.matmul(gtmp, res_surv)
   betavec[chunk1, 0] = beta_tmp
   zvec[chunk1, 0] = beta_tmp/np.sqrt(vtmp)
@@ -247,7 +247,7 @@ for chunk1 in chunk_array:
 
 bim['allele_frq'] = np.array(meanvec)/2
 bim['allele_std'] = np.array(hetvec)
-bim['beta_surv'] = np.array(betavec)/ia.shape[0]
+bim['beta_surv'] = np.array(betavec)/ia.shape[0] # For normalizing purpose
 bim['z'] = np.array(zvec)
 
 logger.info('Writing results to ' + outpath + '.beta.txt')
